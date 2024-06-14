@@ -1,0 +1,92 @@
+int V = 10;// number of vehicles
+int f = 610000;// fixed cost
+int T = 12;// time periods
+int Cus = 18;//number of customers
+int P = 10;// number of products
+
+range Node = 0 .. Cus;
+range Customer = 1 .. Cus;
+range Vehicle = 1 .. V;
+range Time = 1 .. T;
+range Product = 1.. P;
+
+tuple demand {
+  int Product;
+  int Node;
+  int Days;
+  float Demands;
+}
+
+tuple matrix {
+  int NodesFrom;
+  int NodesTo;
+  float Distance;
+}
+
+tuple route {
+  int NodesFrom;
+  int NodesTo;
+}
+
+int Storage[Node] = ...;//storage capacity
+int TCost = ...;//travel cost
+{demand} DemandSet = ...;//demand of supermarket
+{matrix} MatrixSet = ...;// distance matrix
+{route} RouteSet = {< Nf, Nt > | < Nf, Nt, D > in MatrixSet};
+{int} CustomerSupplierSet = {Nf | < Nf, Nt, D > in MatrixSet};// number of nodes
+{int} ProductSet = {P | < P, N, T, D > in DemandSet};// number of product types
+float Holding = ...;//inventory holding cost
+float VCapacity = ...;//vehicle capacity
+
+dvar boolean x[Vehicle][RouteSet][Time];//node I is traversed by vehicle v
+dvar float y[ProductSet][Vehicle][RouteSet][Time];//Amount of product pcarried by vehicle v
+dvar float r[ProductSet][CustomerSupplierSet][Time];//Amount of on-hand inventory of product p by customer I
+
+dexpr float fixed_cost = sum ( v in Vehicle, < Nf, Nt, D > in MatrixSet,
+   t in Time ) x[v][< 0, Nt >][t] * f;
+dexpr float transport_cost = sum ( v in Vehicle, < Nf, Nt, D > in MatrixSet,
+   t in Time ) x[v][< Nf, Nt >][t] * D * TCost;
+dexpr float holding_cost = sum ( p in ProductSet, c in CustomerSupplierSet,
+   t in Time ) r[p][c][t] * Holding;
+
+minimize
+  fixed_cost + transport_cost + holding_cost;
+subject to {
+//Constraint 1
+  forall ( v in Vehicle, t in Time ) {
+    sum ( < i, j > in RouteSet ) x[v][< i, j >][t] <= 1;
+  }
+//Constraint 2  
+  forall ( v in Vehicle, i in CustomerSupplierSet, t in Time ) {
+    sum ( j in CustomerSupplierSet ) x[v][< i, j >][t] + sum 
+      ( k in CustomerSupplierSet ) x[v][< k, i >][t] == 0;
+  }
+//Constraint 3  
+  forall ( v in Vehicle, < i, j > in RouteSet, t in Time ) {
+    sum ( p in ProductSet ) y[p][v][< i, j >][t] <= VCapacity * x[v][< i,
+       j >][t];
+  }
+//Constraint 4  
+  forall ( v in Vehicle, t in Time, p in ProductSet, i in CustomerSupplierSet )
+     {
+    sum ( j in CustomerSupplierSet ) y[p][v][< j, i >][t] + sum 
+      ( k in CustomerSupplierSet ) y[p][v][< i, k >][t] >= 0;
+  }
+//Constraint 5
+  forall ( t in 2..T, < p, i, t, d > in DemandSet) {
+    r[p][i][t-1] - r[p][i][t] + sum ( v in Vehicle ) ( sum 
+      ( j in CustomerSupplierSet ) y[p][v][< j, i >][t] ) == d;   
+  }
+//Constraint 6
+  forall ( i in Customer, t in Time ) {
+    sum (p in ProductSet) r[p][i][t] <= Storage[i];
+  }
+//Constraint 7
+  forall ( i in CustomerSupplierSet, t in Time, p in ProductSet ) {
+    r[p][i][t] >= 0;
+  }
+//Constraint 8  
+  forall ( p in ProductSet, < i, k > in RouteSet, v in Vehicle, t in Time ) {
+    y[p][v][< i, k >][t] >= 0;
+  }
+}
